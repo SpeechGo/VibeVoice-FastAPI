@@ -1,0 +1,95 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.conda/
+conda-env/
+
+# PyInstaller
+*.spec
+*.manifest
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+.tox/
+.nox/
+.pytest_cache/
+.cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+pytestdebug.log
+nosetests.xml
+*.cover
+*.py,cover
+
+# Type checkers / linters
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Logs
+*.log
+logs/
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+profile_default/
+ipython_config.py
+
+# Environment files
+.env
+.env.*
+*.env
+.envrc
+.env.local
+
+# IDE/editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# C extensions
+*.so
+
+# Node (if present under web/ or root)
+node_modules/
+*.tsbuildinfo
+
+# Local tooling
+.python-version
+.pyright
+
+.claude/session_context/

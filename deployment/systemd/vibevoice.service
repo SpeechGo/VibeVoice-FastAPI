@@ -1,0 +1,67 @@
+# ABOUTME: Systemd service file for VibeVoice-FastAPI production deployment
+# ABOUTME: Handles auto-restart, resource limits, and proper service management
+
+[Unit]
+Description=VibeVoice FastAPI Text-to-Speech Service
+Documentation=https://github.com/vibevoice/vibevoice-fastapi
+After=docker.service
+Requires=docker.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+User=vibevoice
+Group=vibevoice
+WorkingDirectory=/opt/vibevoice-fastapi
+
+# Environment
+Environment=DOCKER_BUILDKIT=1
+Environment=COMPOSE_DOCKER_CLI_BUILD=1
+EnvironmentFile=-/opt/vibevoice-fastapi/.env.production
+
+# Main command
+ExecStartPre=-/usr/bin/docker-compose down
+ExecStartPre=/usr/bin/docker-compose pull
+ExecStart=/usr/bin/docker-compose up --no-deps vibevoice-api
+ExecStop=/usr/bin/docker-compose down
+ExecReload=/usr/bin/docker-compose restart vibevoice-api
+
+# Restart configuration
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryHigh=6G
+MemoryMax=8G
+TasksMax=4096
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/vibevoice-fastapi
+PrivateTmp=true
+PrivateDevices=false  # Need GPU access
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vibevoice-api
+
+# Kill settings
+TimeoutStartSec=300
+TimeoutStopSec=60
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+Alias=vibevoice.service

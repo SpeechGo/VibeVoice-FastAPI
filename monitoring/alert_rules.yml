@@ -1,0 +1,126 @@
+# ABOUTME: Prometheus alert rules for VibeVoice FastAPI monitoring
+# ABOUTME: Defines specific alert conditions and thresholds for operational monitoring
+
+groups:
+- name: vibevoice.alerts
+  rules:
+  # High error rate alert
+  - alert: VibeVoiceHighErrorRate
+    expr: rate(vibe_requests_total{status=~"[45].."}[5m]) / rate(vibe_requests_total[5m]) > 0.05
+    for: 2m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "High error rate detected in VibeVoice API"
+      description: "Error rate is {{ $value | humanizePercentage }} for the past 5 minutes"
+  
+  # High latency alert
+  - alert: VibeVoiceHighLatency
+    expr: histogram_quantile(0.95, rate(vibe_request_duration_seconds_bucket[5m])) > 30
+    for: 5m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "High latency detected in VibeVoice API"
+      description: "95th percentile latency is {{ $value }}s for the past 5 minutes"
+  
+  # Critical latency alert  
+  - alert: VibeVoiceCriticalLatency
+    expr: histogram_quantile(0.95, rate(vibe_request_duration_seconds_bucket[5m])) > 60
+    for: 2m
+    labels:
+      severity: critical
+      service: vibevoice-fastapi
+    annotations:
+      summary: "Critical latency detected in VibeVoice API"
+      description: "95th percentile latency is {{ $value }}s for the past 5 minutes"
+  
+  # GPU utilization too high
+  - alert: VibeVoiceGPUHighUtilization
+    expr: vibe_gpu_utilization_ratio > 0.95
+    for: 10m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "GPU utilization is very high"
+      description: "GPU {{ $labels.device_id }} utilization is {{ $value | humanizePercentage }}"
+  
+  # GPU memory usage too high
+  - alert: VibeVoiceGPUHighMemoryUsage
+    expr: vibe_gpu_memory_usage_ratio > 0.90
+    for: 5m
+    labels:
+      severity: critical
+      service: vibevoice-fastapi
+    annotations:
+      summary: "GPU memory usage is critically high"
+      description: "GPU {{ $labels.device_id }} memory usage is {{ $value | humanizePercentage }}"
+  
+  # GPU temperature too high
+  - alert: VibeVoiceGPUHighTemperature
+    expr: vibe_gpu_temperature_celsius > 85
+    for: 5m
+    labels:
+      severity: critical
+      service: vibevoice-fastapi
+    annotations:
+      summary: "GPU temperature is too high"
+      description: "GPU {{ $labels.device_id }} temperature is {{ $value }}°C"
+  
+  # Service down alert
+  - alert: VibeVoiceServiceDown
+    expr: up{job="vibevoice-fastapi"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: vibevoice-fastapi
+    annotations:
+      summary: "VibeVoice FastAPI service is down"
+      description: "VibeVoice FastAPI service has been down for more than 1 minute"
+  
+  # Model inference taking too long
+  - alert: VibeVoiceSlowInference
+    expr: histogram_quantile(0.95, rate(vibe_model_inference_time_seconds_bucket[5m])) > 60
+    for: 10m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "Model inference is slow"
+      description: "95th percentile inference time is {{ $value }}s for model {{ $labels.model_variant }}"
+  
+  # Too many active connections (potential memory issue)
+  - alert: VibeVoiceTooManyConnections
+    expr: vibe_active_connections > 100
+    for: 5m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "Too many active WebSocket connections"
+      description: "{{ $value }} active WebSocket connections detected"
+  
+  # Model queue backing up
+  - alert: VibeVoiceQueueBackup
+    expr: vibe_model_queue_size > 10
+    for: 2m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "Model processing queue is backing up"
+      description: "{{ $value }} requests waiting in queue"
+      
+  # No recent requests (service may be unreachable)
+  - alert: VibeVoiceNoRequests
+    expr: rate(vibe_requests_total[10m]) == 0
+    for: 5m
+    labels:
+      severity: warning
+      service: vibevoice-fastapi
+    annotations:
+      summary: "No requests received recently"
+      description: "No requests have been received for the past 10 minutes"

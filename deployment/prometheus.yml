@@ -1,0 +1,37 @@
+# ABOUTME: Prometheus monitoring configuration for VibeVoice-FastAPI
+# ABOUTME: Scrapes metrics from the FastAPI service for observability
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # VibeVoice FastAPI metrics
+  - job_name: 'vibevoice-api'
+    static_configs:
+      - targets: ['vibevoice-api:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Nginx metrics (if nginx-prometheus-exporter is running)
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['nginx-exporter:9113']
+    scrape_interval: 15s
+
+  # Node exporter for system metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 15s
+
+  # NVIDIA GPU metrics (if nvidia-smi-exporter is running)
+  - job_name: 'gpu'
+    static_configs:
+      - targets: ['gpu-exporter:9835']
+    scrape_interval: 10s

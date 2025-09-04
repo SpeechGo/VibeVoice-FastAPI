@@ -1,0 +1,158 @@
+# ABOUTME: Production Docker Compose configuration with full monitoring stack
+# ABOUTME: Includes Nginx, Prometheus, Grafana, and log aggregation
+
+version: '3.8'
+
+services:
+  # Main VibeVoice API service
+  vibevoice-api:
+    extends:
+      file: ../docker-compose.yml
+      service: vibevoice-api
+    environment:
+      - LOG_LEVEL=warning
+      - MAX_CONCURRENCY=2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 8G
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: vibevoice-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy_params.conf:/etc/nginx/conf.d/proxy_params.conf:ro
+      - ./websocket_params.conf:/etc/nginx/conf.d/websocket_params.conf:ro
+      - ./rate_limit.conf:/etc/nginx/conf.d/rate_limit.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    depends_on:
+      vibevoice-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vibevoice_network
+
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: vibevoice-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - vibevoice_network
+
+  # Grafana dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: vibevoice-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=vibevoice_admin_2024
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    restart: unless-stopped
+    networks:
+      - vibevoice_network
+
+  # Node exporter for system metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: vibevoice-node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    networks:
+      - vibevoice_network
+
+  # Log aggregation (optional)
+  loki:
+    image: grafana/loki:latest
+    container_name: vibevoice-loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+    restart: unless-stopped
+    networks:
+      - vibevoice_network
+
+  # Log shipping
+  promtail:
+    image: grafana/promtail:latest
+    container_name: vibevoice-promtail
+    volumes:
+      - nginx_logs:/var/log/nginx:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    restart: unless-stopped
+    networks:
+      - vibevoice_network
+
+volumes:
+  vibevoice_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./volumes/models
+  
+  prometheus_data:
+    driver: local
+  
+  grafana_data:
+    driver: local
+  
+  loki_data:
+    driver: local
+  
+  nginx_logs:
+    driver: local
+
+networks:
+  vibevoice_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,204 @@
+# ABOUTME: Prometheus configuration for VibeVoice FastAPI monitoring
+# ABOUTME: Defines scraping targets, alert rules, and recording rules for the monitoring system
+
+global:
+  scrape_interval: 15s      # Set the scrape interval to every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  external_labels:
+    monitor: 'vibevoice-fastapi'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'
+rule_files:
+  - "alert_rules.yml"
+  - "recording_rules.yml"
+
+# Scrape configuration
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config
+  - job_name: 'vibevoice-fastapi'
+    
+    # Override the global default and scrape targets every 10 seconds
+    scrape_interval: 10s
+    
+    # Path to scrape metrics from
+    metrics_path: /metrics
+    
+    # Scheme defaults to 'http'
+    scheme: http
+    
+    static_configs:
+      - targets: 
+        - 'localhost:8000'    # VibeVoice FastAPI service
+        - 'vibevoice-api:8000' # Docker container name
+    
+    # Add service-specific labels
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: service
+        replacement: vibevoice-fastapi
+
+  # Optional: Scrape Prometheus itself for monitoring
+  - job_name: 'prometheus'
+    scrape_interval: 30s
+    static_configs:
+      - targets: 
+        - 'localhost:9090'
+
+  # Optional: Node exporter for system metrics
+  - job_name: 'node-exporter'
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+        # - 'localhost:9100'
+    
+    # Only enable if you have node_exporter running
+    honor_labels: true
+    
+  # Optional: GPU exporter for additional GPU metrics
+  - job_name: 'gpu-exporter'
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+        # - 'localhost:9400'  # Example GPU exporter port
+    
+    # Only enable if you have a dedicated GPU exporter
+
+# Recording rules for aggregating metrics
+# These create new time series from existing ones
+recording_rules:
+  - name: vibevoice.rules
+    rules:
+    # Request rate by status
+    - record: vibevoice:request_rate_5m
+      expr: rate(vibe_requests_total[5m])
+    
+    # Request success rate
+    - record: vibevoice:success_rate_5m
+      expr: rate(vibe_requests_total{status=~"2.."}[5m]) / rate(vibe_requests_total[5m])
+    
+    # Error rate
+    - record: vibevoice:error_rate_5m
+      expr: rate(vibe_requests_total{status=~"[45].."}[5m]) / rate(vibe_requests_total[5m])
+    
+    # Average request latency
+    - record: vibevoice:request_latency_mean_5m
+      expr: rate(vibe_request_duration_seconds_sum[5m]) / rate(vibe_request_duration_seconds_count[5m])
+    
+    # GPU utilization aggregated across devices
+    - record: vibevoice:gpu_utilization_avg
+      expr: avg(vibe_gpu_utilization_ratio)
+    
+    # GPU memory usage aggregated
+    - record: vibevoice:gpu_memory_usage_avg
+      expr: avg(vibe_gpu_memory_usage_ratio)
+
+# Alert rules for operational monitoring
+alerting_rules:
+  - name: vibevoice.alerts
+    rules:
+    # High error rate alert
+    - alert: VibeVoiceHighErrorRate
+      expr: vibevoice:error_rate_5m > 0.05  # 5% error rate
+      for: 2m
+      labels:
+        severity: warning
+        service: vibevoice-fastapi
+      annotations:
+        summary: "High error rate detected in VibeVoice API"
+        description: "Error rate is {{ $value | humanizePercentage }} for the past 5 minutes"
+    
+    # High latency alert
+    - alert: VibeVoiceHighLatency
+      expr: histogram_quantile(0.95, rate(vibe_request_duration_seconds_bucket[5m])) > 30
+      for: 5m
+      labels:
+        severity: warning
+        service: vibevoice-fastapi
+      annotations:
+        summary: "High latency detected in VibeVoice API"
+        description: "95th percentile latency is {{ $value }}s for the past 5 minutes"
+    
+    # GPU utilization too high
+    - alert: VibeVoiceGPUHighUtilization
+      expr: vibe_gpu_utilization_ratio > 0.95
+      for: 10m
+      labels:
+        severity: warning
+        service: vibevoice-fastapi
+      annotations:
+        summary: "GPU utilization is very high"
+        description: "GPU {{ $labels.device_id }} utilization is {{ $value | humanizePercentage }}"
+    
+    # GPU memory usage too high
+    - alert: VibeVoiceGPUHighMemoryUsage
+      expr: vibe_gpu_memory_usage_ratio > 0.90
+      for: 5m
+      labels:
+        severity: critical
+        service: vibevoice-fastapi
+      annotations:
+        summary: "GPU memory usage is critically high"
+        description: "GPU {{ $labels.device_id }} memory usage is {{ $value | humanizePercentage }}"
+    
+    # GPU temperature too high
+    - alert: VibeVoiceGPUHighTemperature
+      expr: vibe_gpu_temperature_celsius > 85
+      for: 5m
+      labels:
+        severity: critical
+        service: vibevoice-fastapi
+      annotations:
+        summary: "GPU temperature is too high"
+        description: "GPU {{ $labels.device_id }} temperature is {{ $value }}°C"
+    
+    # Service down alert
+    - alert: VibeVoiceServiceDown
+      expr: up{job="vibevoice-fastapi"} == 0
+      for: 1m
+      labels:
+        severity: critical
+        service: vibevoice-fastapi
+      annotations:
+        summary: "VibeVoice FastAPI service is down"
+        description: "VibeVoice FastAPI service has been down for more than 1 minute"
+    
+    # Model inference taking too long
+    - alert: VibeVoiceSlowInference
+      expr: histogram_quantile(0.95, rate(vibe_model_inference_time_seconds_bucket[5m])) > 60
+      for: 10m
+      labels:
+        severity: warning
+        service: vibevoice-fastapi
+      annotations:
+        summary: "Model inference is slow"
+        description: "95th percentile inference time is {{ $value }}s for model {{ $labels.model_variant }}"
+    
+    # Too many active connections (potential memory issue)
+    - alert: VibeVoiceTooManyConnections
+      expr: vibe_active_connections > 100
+      for: 5m
+      labels:
+        severity: warning
+        service: vibevoice-fastapi
+      annotations:
+        summary: "Too many active WebSocket connections"
+        description: "{{ $value }} active WebSocket connections detected"
+    
+    # Model queue backing up
+    - alert: VibeVoiceQueueBackup
+      expr: vibe_model_queue_size > 10
+      for: 2m
+      labels:
+        severity: warning
+        service: vibevoice-fastapi
+      annotations:
+        summary: "Model processing queue is backing up"
+        description: "{{ $value }} requests waiting in queue"

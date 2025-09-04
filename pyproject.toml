@@ -1,0 +1,220 @@
+# ABOUTME: Project configuration for VibeVoice-FastAPI service with UV dependency management
+# ABOUTME: Defines all dependencies, build settings, and development tools for the FastAPI TTS service
+
+[project]
+name = "vibevoice-fastapi"
+version = "1.0.0"
+description = "Production-ready FastAPI service for VibeVoice text-to-speech model"
+authors = [
+    { name = "VibeVoice Team", email = "team@vibevoice.dev" }
+]
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+dependencies = [
+    # FastAPI and ASGI server
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    # ML/AI dependencies
+    "torch>=2.1.0",
+    "transformers==4.51.3",  # VibeVoice requires exactly this version
+    "accelerate>=0.24.0",
+    "safetensors>=0.4.0",
+    # Audio processing
+    "soundfile>=0.12.0",
+    "librosa>=0.10.0",
+    "numpy>=1.24.0",
+    # API and data handling
+    "pydantic>=2.5.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.6",
+    # Rate limiting
+    "slowapi>=0.1.9",
+    # Monitoring and logging
+    "prometheus-client>=0.19.0",
+    "structlog>=23.2.0",
+    # Development utilities
+    "python-dotenv>=1.0.0",
+    # GPU monitoring
+    "pynvml>=11.5.0",
+    # Additional dependencies for VibeVoice
+    "tqdm>=4.65.0",
+    "diffusers>=0.25.0",
+    "scipy>=1.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.25.0",  # For FastAPI test client
+    
+    # Code quality
+    "black>=23.9.0",
+    "isort>=5.12.0",
+    "mypy>=1.6.0",
+    "ruff>=0.1.0",
+    
+    # Pre-commit hooks
+    "pre-commit>=3.5.0",
+]
+
+gpu = [
+    # Additional GPU utilities (pynvml is now in main dependencies)
+    "gpustat>=1.1.0",
+]
+
+[project.scripts]
+vibevoice-api = "api.main:main"
+
+[project.urls]
+Homepage = "https://github.com/vibevoice/vibevoice-fastapi"
+Repository = "https://github.com/vibevoice/vibevoice-fastapi.git"
+Issues = "https://github.com/vibevoice/vibevoice-fastapi/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["api"]
+
+# Tool configurations
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=api",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=90",
+]
+markers = [
+    "slow: marks tests as slow (may require model loading)",
+    "integration: marks tests as integration tests",
+    "gpu: marks tests that require GPU access",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["api"]
+branch = true
+omit = [
+    "tests/*",
+    "*/conftest.py",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "torch.*",
+    "transformers.*",
+    "librosa.*",
+    "soundfile.*",
+    "prometheus_client.*",
+    "pynvml.*",
+    "gpustat.*",
+]
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+src_paths = ["api", "tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+    "ICN", # flake8-import-conventions
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "ARG001", # unused function arguments
+    "ARG002", # unused method arguments
+]
+unfixable = ["B"]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["E402", "F401", "F403", "F811"]
+"tests/**/*" = ["ARG", "FBT", "PLR2004", "S101", "TID252"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+]

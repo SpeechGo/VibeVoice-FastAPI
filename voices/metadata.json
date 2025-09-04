@@ -1,0 +1,58 @@
+{
+  "voices": [
+    {
+      "id": "en-Alice_woman",
+      "name": "Alice",
+      "language": "en",
+      "gender": "woman"
+    },
+    {
+      "id": "en-Carter_man",
+      "name": "Carter",
+      "language": "en",
+      "gender": "man"
+    },
+    {
+      "id": "en-Frank_man",
+      "name": "Frank",
+      "language": "en",
+      "gender": "man"
+    },
+    {
+      "id": "en-Mary_woman_bgm",
+      "name": "Mary",
+      "language": "en",
+      "gender": "woman"
+    },
+    {
+      "id": "en-Maya_woman",
+      "name": "Maya",
+      "language": "en",
+      "gender": "woman"
+    },
+    {
+      "id": "in-Samuel_man",
+      "name": "Samuel",
+      "language": "in",
+      "gender": "man"
+    },
+    {
+      "id": "zh-Anchen_man_bgm",
+      "name": "Anchen",
+      "language": "zh",
+      "gender": "man"
+    },
+    {
+      "id": "zh-Bowen_man",
+      "name": "Bowen",
+      "language": "zh",
+      "gender": "man"
+    },
+    {
+      "id": "zh-Xinran_woman",
+      "name": "Xinran",
+      "language": "zh",
+      "gender": "woman"
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+# ABOUTME: Docker ignore file to exclude unnecessary files from build context
+# ABOUTME: Optimizes build performance and reduces image size
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+vibevoice/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Documentation
+docs/_build/
+.readthedocs.yml
+
+# Logs
+*.log
+logs/
+.log
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile.*
+docker-compose*.yml
+.dockerignore
+
+# Development tools
+.pre-commit-config.yaml
+.black
+.isort.cfg
+.flake8
+.mypy_cache/
+.ruff_cache/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Model files (these should come from cache layer)
+models/
+*.bin
+*.safetensors
+model_cache/
+
+# Generated files
+volumes/
+
+# Deployment configs (copied separately if needed)
+deployment/ssl/
+deployment/secrets/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+
+# README and docs (not needed in container)
+README.md
+*.md
+!requirements*.txt
+
+# Scripts (copied separately)
+scripts/
+!scripts/entrypoint.sh

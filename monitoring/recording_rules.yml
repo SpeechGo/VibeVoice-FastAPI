@@ -1,0 +1,112 @@
+# ABOUTME: Prometheus recording rules for VibeVoice FastAPI monitoring
+# ABOUTME: Pre-computes commonly used aggregations to improve query performance
+
+groups:
+- name: vibevoice.rules
+  interval: 30s
+  rules:
+  # Request rate by status
+  - record: vibevoice:request_rate_5m
+    expr: rate(vibe_requests_total[5m])
+    labels:
+      job: vibevoice-fastapi
+  
+  # Request success rate (2xx responses)
+  - record: vibevoice:success_rate_5m
+    expr: rate(vibe_requests_total{status=~"2.."}[5m]) / rate(vibe_requests_total[5m])
+    labels:
+      job: vibevoice-fastapi
+  
+  # Error rate (4xx and 5xx responses)
+  - record: vibevoice:error_rate_5m
+    expr: rate(vibe_requests_total{status=~"[45].."}[5m]) / rate(vibe_requests_total[5m])
+    labels:
+      job: vibevoice-fastapi
+  
+  # Average request latency
+  - record: vibevoice:request_latency_mean_5m
+    expr: rate(vibe_request_duration_seconds_sum[5m]) / rate(vibe_request_duration_seconds_count[5m])
+    labels:
+      job: vibevoice-fastapi
+  
+  # Request latency percentiles
+  - record: vibevoice:request_latency_p50_5m
+    expr: histogram_quantile(0.50, rate(vibe_request_duration_seconds_bucket[5m]))
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:request_latency_p95_5m
+    expr: histogram_quantile(0.95, rate(vibe_request_duration_seconds_bucket[5m]))
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:request_latency_p99_5m
+    expr: histogram_quantile(0.99, rate(vibe_request_duration_seconds_bucket[5m]))
+    labels:
+      job: vibevoice-fastapi
+  
+  # GPU utilization aggregated across devices
+  - record: vibevoice:gpu_utilization_avg
+    expr: avg(vibe_gpu_utilization_ratio)
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:gpu_utilization_max
+    expr: max(vibe_gpu_utilization_ratio)
+    labels:
+      job: vibevoice-fastapi
+  
+  # GPU memory usage aggregated
+  - record: vibevoice:gpu_memory_usage_avg
+    expr: avg(vibe_gpu_memory_usage_ratio)
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:gpu_memory_usage_max
+    expr: max(vibe_gpu_memory_usage_ratio)
+    labels:
+      job: vibevoice-fastapi
+  
+  # GPU memory in bytes
+  - record: vibevoice:gpu_memory_used_total_bytes
+    expr: sum(vibe_gpu_memory_used_bytes)
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:gpu_memory_total_bytes
+    expr: sum(vibe_gpu_memory_total_bytes)
+    labels:
+      job: vibevoice-fastapi
+  
+  # Model inference times
+  - record: vibevoice:inference_latency_mean_5m
+    expr: rate(vibe_model_inference_time_seconds_sum[5m]) / rate(vibe_model_inference_time_seconds_count[5m])
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:inference_latency_p95_5m
+    expr: histogram_quantile(0.95, rate(vibe_model_inference_time_seconds_bucket[5m]))
+    labels:
+      job: vibevoice-fastapi
+  
+  # Throughput metrics
+  - record: vibevoice:requests_per_minute
+    expr: rate(vibe_requests_total[1m]) * 60
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:successful_requests_per_minute
+    expr: rate(vibe_requests_total{status=~"2.."}[1m]) * 60
+    labels:
+      job: vibevoice-fastapi
+  
+  # Connection metrics
+  - record: vibevoice:avg_active_connections_5m
+    expr: avg_over_time(vibe_active_connections[5m])
+    labels:
+      job: vibevoice-fastapi
+  
+  - record: vibevoice:max_active_connections_5m
+    expr: max_over_time(vibe_active_connections[5m])
+    labels:
+      job: vibevoice-fastapi

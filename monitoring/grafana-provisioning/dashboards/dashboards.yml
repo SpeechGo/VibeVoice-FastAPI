@@ -1,0 +1,16 @@
+# ABOUTME: Grafana dashboard configuration for automatic dashboard loading
+# ABOUTME: Auto-loads VibeVoice dashboard from JSON file
+
+apiVersion: 1
+
+providers:
+- name: 'vibevoice-dashboards'
+  orgId: 1
+  folder: 'VibeVoice'
+  folderUid: 'vibevoice'
+  type: file
+  disableDeletion: false
+  updateIntervalSeconds: 10
+  allowUiUpdates: true
+  options:
+    path: /var/lib/grafana/dashboards
