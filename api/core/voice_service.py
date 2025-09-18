@@ -911,6 +911,8 @@ class VoiceService:
                     continue
 
                 if torch.is_tensor(audio_chunk):
+                    if audio_chunk.dtype == torch.bfloat16:
+                        audio_chunk = audio_chunk.to(torch.float32)
                     np_chunk = audio_chunk.detach().cpu().numpy()
                 else:
                     np_chunk = np.asarray(audio_chunk)
