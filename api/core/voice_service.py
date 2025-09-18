@@ -17,6 +17,12 @@ import numpy as np
 from transformers import AutoProcessor, AutoModelForCausalLM
 import sys
 import os
+
+# Optional VibeVoice streaming support
+AsyncAudioStreamer = None
+VibeVoiceProcessor = None
+VibeVoiceForConditionalGenerationInference = None
+
 # Try to import VibeVoice model if available
 try:
     # Add parent directory to path temporarily to import VibeVoice
@@ -26,12 +32,16 @@ try:
         sys.path.insert(0, vibevoice_dir)
         from vibevoice.modular.modeling_vibevoice_inference import VibeVoiceForConditionalGenerationInference
         from vibevoice.processor.vibevoice_processor import VibeVoiceProcessor
+        from vibevoice.modular.streamer import AsyncAudioStreamer
         VIBEVOICE_AVAILABLE = True
         sys.path.pop(0)  # Remove from path after import
     else:
         VIBEVOICE_AVAILABLE = False
 except ImportError:
     VIBEVOICE_AVAILABLE = False
+    AsyncAudioStreamer = None
+    VibeVoiceProcessor = None
+    VibeVoiceForConditionalGenerationInference = None
     
 if not VIBEVOICE_AVAILABLE:
     # Fallback to AutoModelForCausalLM if VibeVoice not available
@@ -525,12 +535,87 @@ class VoiceService:
         Raises:
             InvalidVoiceError: If any voice is not found
         """
+        if not speaker_ids:
+            raise InvalidVoiceError("At least one speaker must be provided")
+
         available_voices = {v.id for v in self.list_voices(include_hidden=True)}
         
         for speaker_id in speaker_ids:
             if speaker_id not in available_voices:
                 raise InvalidVoiceError(f"Voice not found: {speaker_id}")
-    
+
+    def _format_script_text(self, req: VoiceGenerationRequest) -> str:
+        """Format script text into speaker-tagged lines.
+
+        Args:
+            req: Voice generation request
+
+        Returns:
+            Formatted script text matching model expectations
+        """
+        lines = req.script.strip().split('\n')
+        formatted_lines: List[str] = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if line.startswith('Speaker ') and ':' in line:
+                formatted_lines.append(line)
+            else:
+                speaker_index = len(formatted_lines) % len(req.speakers)
+                formatted_lines.append(f"Speaker {speaker_index}: {line}")
+
+        return '\n'.join(formatted_lines)
+
+    def _load_voice_samples(self, speaker_ids: List[str]) -> List[np.ndarray]:
+        """Load and preprocess reference voice samples.
+
+        Args:
+            speaker_ids: Speaker identifiers to load
+
+        Returns:
+            List of numpy arrays containing voice audio
+        """
+        voice_samples: List[np.ndarray] = []
+
+        for speaker_id in speaker_ids:
+            voice_path = os.path.join(VOICES_DIR, f"{speaker_id}.wav")
+            if not os.path.exists(voice_path):
+                raise InvalidVoiceError(f"Voice file not found: {speaker_id}")
+
+            import soundfile as sf
+
+            audio, sample_rate = sf.read(voice_path)
+            if sample_rate != 24000:
+                import librosa
+
+                audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=24000)
+
+            voice_samples.append(audio)
+
+        return voice_samples
+
+    def _prepare_model_inputs(self, req: VoiceGenerationRequest):
+        """Prepare model inputs for generation based on request parameters."""
+        script_text = self._format_script_text(req)
+        voice_samples = self._load_voice_samples(req.speakers)
+
+        inputs = self._processor(
+            text=[script_text],
+            voice_samples=[voice_samples],
+            padding=True,
+            return_tensors="pt",
+            return_attention_mask=True
+        )
+
+        for key, value in inputs.items():
+            if torch.is_tensor(value):
+                inputs[key] = value.to(self._device)
+
+        return inputs
+
     async def _generate_audio(self,
                              req: VoiceGenerationRequest,
                              cancel_check: Optional[CancelCheck] = None) -> GenerateResult:
@@ -546,32 +631,11 @@ class VoiceService:
         try:
             start_time = time.time()
             
-            # Prepare the script for generation exactly like the demo
-            # Convert to speaker rotation format: "Speaker {id}: {text}" (0-based)
-            lines = req.script.strip().split('\n')
-            formatted_script_lines = []
-            
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                    
-                # Check if line already has speaker format
-                if line.startswith('Speaker ') and ':' in line:
-                    formatted_script_lines.append(line)
-                else:
-                    # Auto-assign to speakers in rotation (0-based like demo)
-                    speaker_id = len(formatted_script_lines) % len(req.speakers)
-                    formatted_script_lines.append(f"Speaker {speaker_id}: {line}")
-            
-            script_text = '\n'.join(formatted_script_lines)
-            
             # Run generation in a separate thread to avoid blocking the event loop
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
                 None,
                 self._run_model_inference,
-                script_text,
                 req
             )
             
@@ -613,13 +677,12 @@ class VoiceService:
             logger.error(f"Unexpected error during generation: {e}")
             raise
     
-    def _run_model_inference(self, script_text: str, req: VoiceGenerationRequest) -> tuple[np.ndarray, int]:
+    def _run_model_inference(self, req: VoiceGenerationRequest) -> tuple[np.ndarray, int]:
         """Run the actual model inference in a thread-safe manner.
-        
+
         Args:
-            script_text: Formatted script text
             req: Generation request parameters
-            
+
         Returns:
             Tuple of (audio_array, sample_rate)
         """
@@ -628,37 +691,11 @@ class VoiceService:
             if req.seed is not None:
                 torch.manual_seed(req.seed)
                 np.random.seed(req.seed)
-            
-            # Load voice samples
-            voice_samples = []
-            for speaker_id in req.speakers:
-                voice_path = os.path.join(VOICES_DIR, f"{speaker_id}.wav")
-                if not os.path.exists(voice_path):
-                    raise InvalidVoiceError(f"Voice file not found: {speaker_id}")
-                
-                # Load and preprocess voice sample
-                import soundfile as sf
-                audio, sr = sf.read(voice_path)
-                if sr != 24000:
-                    import librosa
-                    audio = librosa.resample(audio, orig_sr=sr, target_sr=24000)
-                voice_samples.append(audio)
-            
+
             # Process with the model
             with torch.no_grad():
                 # Prepare inputs
-                inputs = self._processor(
-                    text=[script_text],
-                    voice_samples=[voice_samples],
-                    padding=True,
-                    return_tensors="pt",
-                    return_attention_mask=True
-                )
-                
-                # Move to device
-                for k, v in inputs.items():
-                    if torch.is_tensor(v):
-                        inputs[k] = v.to(self._device)
+                inputs = self._prepare_model_inputs(req)
                 
                 # Set inference steps if configurable
                 if hasattr(self._model, 'set_ddpm_inference_steps'):
@@ -748,47 +785,157 @@ class VoiceService:
                                     cancel_check: Optional[CancelCheck] = None,
                                     timeout_sec: Optional[float] = None) -> AsyncIterator[bytes]:
         """Internal method for streaming PCM16 audio chunks.
-        
+
         Args:
             req: Voice generation request
             cancel_check: Optional cancellation check function
             timeout_sec: Optional timeout in seconds
-            
+
         Yields:
             PCM16 audio chunks
         """
         try:
-            # Create audio streamer
-            streamer = AudioStreamer(sample_rate=req.sample_rate, chunk_duration_sec=0.5)
-            
-            # Generate full audio first (placeholder - real streaming would be different)
+            if (
+                VIBEVOICE_AVAILABLE
+                and AsyncAudioStreamer is not None
+                and VibeVoiceForConditionalGenerationInference is not None
+                and isinstance(self._model, VibeVoiceForConditionalGenerationInference)
+            ):
+                async for chunk in self._stream_pcm16_vibevoice(req, cancel_check, timeout_sec):
+                    yield chunk
+                return
+
+            # Fallback: generate entire audio then chunk
+            streamer = AudioStreamer(sample_rate=req.sample_rate, chunk_duration_sec=1.5)
+
             result = await self._generate_audio(req, cancel_check)
-            
+
             if cancel_check and cancel_check():
                 return
-            
-            # Extract WAV bytes and skip the WAV header to get PCM16
+
             wav_bytes = result.wav_bytes
-            # Skip 44-byte WAV header to get raw PCM16 data
             pcm16_bytes = wav_bytes[44:] if len(wav_bytes) > 44 else b''
-            
-            # Stream in chunks
+
             chunk_size = streamer.bytes_per_chunk
             for i in range(0, len(pcm16_bytes), chunk_size):
                 if cancel_check and cancel_check():
                     break
-                    
+
                 chunk = pcm16_bytes[i:i + chunk_size]
                 if chunk:
                     yield chunk
-                    
-                # Allow other coroutines to run
-                await asyncio.sleep(0.001)
-                    
+
+                await asyncio.sleep(0)
+
         except Exception as e:
             logger.error(f"Streaming failed: {e}")
             raise
-    
+
+    async def _stream_pcm16_vibevoice(self,
+                                      req: VoiceGenerationRequest,
+                                      cancel_check: Optional[CancelCheck],
+                                      timeout_sec: Optional[float]) -> AsyncIterator[bytes]:
+        """Stream audio chunks using the VibeVoice async audio streamer."""
+
+        if AsyncAudioStreamer is None:
+            return
+
+        loop = asyncio.get_event_loop()
+        start_time = loop.time()
+
+        streamer = AsyncAudioStreamer(batch_size=1)
+        generation_exception: list[Exception] = []
+
+        def run_generation():
+            try:
+                if req.seed is not None:
+                    torch.manual_seed(req.seed)
+                    np.random.seed(req.seed)
+
+                inputs = self._prepare_model_inputs(req)
+
+                if hasattr(self._model, 'set_ddpm_inference_steps'):
+                    self._model.set_ddpm_inference_steps(num_steps=req.inference_steps)
+
+                self._model.generate(
+                    **inputs,
+                    max_new_tokens=None,
+                    cfg_scale=req.cfg_scale,
+                    tokenizer=self._processor.tokenizer,
+                    generation_config={'do_sample': False},
+                    audio_streamer=streamer,
+                    verbose=False,
+                    refresh_negative=True,
+                )
+            except Exception as exc:  # noqa: BLE001
+                generation_exception.append(exc)
+                try:
+                    streamer.end()
+                except Exception:  # noqa: BLE001
+                    pass
+            finally:
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+        generation_thread = threading.Thread(target=run_generation, daemon=True)
+        generation_thread.start()
+
+        stream_iter = streamer.get_stream(0).__aiter__()
+
+        try:
+            while True:
+                if cancel_check and cancel_check():
+                    streamer.end()
+                    break
+
+                timeout_remaining = None
+                if timeout_sec is not None:
+                    elapsed = loop.time() - start_time
+                    timeout_remaining = timeout_sec - elapsed
+                    if timeout_remaining <= 0:
+                        streamer.end()
+                        raise GenerationTimeoutError(f"Generation timed out after {timeout_sec}s")
+
+                try:
+                    if timeout_remaining is not None:
+                        audio_chunk = await asyncio.wait_for(stream_iter.__anext__(), timeout=timeout_remaining)
+                    else:
+                        audio_chunk = await stream_iter.__anext__()
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError as exc:
+                    streamer.end()
+                    raise GenerationTimeoutError(f"Generation timed out after {timeout_sec}s") from exc
+
+                if audio_chunk is None:
+                    continue
+
+                if torch.is_tensor(audio_chunk):
+                    np_chunk = audio_chunk.detach().cpu().numpy()
+                else:
+                    np_chunk = np.asarray(audio_chunk)
+
+                if np_chunk.size == 0:
+                    continue
+
+                np_chunk = np_chunk.astype(np.float32).reshape(-1)
+                max_val = np.max(np.abs(np_chunk))
+                if max_val > 1.0 and max_val != 0:
+                    np_chunk = np_chunk / max_val
+
+                pcm_chunk = float32_to_pcm16(np_chunk)
+                if pcm_chunk:
+                    yield pcm_chunk
+
+        finally:
+            streamer.end()
+            generation_thread.join(timeout=1.0)
+            if generation_thread.is_alive():
+                logger.warning("Generation thread did not terminate promptly")
+
+        if generation_exception:
+            raise generation_exception[0]
+
     def get_model_info(self) -> dict:
         """Get information about the loaded model.
         
