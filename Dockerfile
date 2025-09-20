@@ -53,8 +53,7 @@ RUN uv venv /app/.venv \
 
 # Pre-download and cache models (this layer will be cached)
 RUN . /app/.venv/bin/activate \
-    && python3 -c  - <<END
-"
+    && python3 <<END
 import os
 from transformers import AutoTokenizer, AutoModel
 from huggingface_hub import snapshot_download
@@ -88,7 +87,6 @@ except Exception as e:
     print(f'Warning: Could not cache VibeVoice-Large: {e}')
 
 print('Model caching completed')
-"
 END
 
 # Stage 3: Runtime image
