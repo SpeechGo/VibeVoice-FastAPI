@@ -2,7 +2,7 @@
 # ABOUTME: Optimized for GPU inference with model caching and minimal runtime image
 
 # Stage 1: Base image with CUDA support
-FROM nvidia/cuda:12.1-devel-ubuntu22.04 AS base
+FROM nvidia/cuda:12.1.0-devel-ubuntu22.04 AS base
 
 # Set environment variables for non-interactive installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -53,7 +53,7 @@ RUN uv venv /app/.venv \
 
 # Pre-download and cache models (this layer will be cached)
 RUN . /app/.venv/bin/activate \
-    && python3 -c "
+    && python3 -c  - <<END
 import os
 from transformers import AutoTokenizer, AutoModel
 from huggingface_hub import snapshot_download
@@ -87,10 +87,10 @@ except Exception as e:
     print(f'Warning: Could not cache VibeVoice-Large: {e}')
 
 print('Model caching completed')
-"
+END
 
 # Stage 3: Runtime image
-FROM nvidia/cuda:12.1-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04 AS runtime
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
