@@ -126,7 +126,7 @@ COPY --from=dependencies /app/.venv /app/.venv
 COPY --from=dependencies /app/model_cache /app/model_cache
 
 # Create necessary directories
-RUN mkdir -p /app/voices /app/logs \
+RUN mkdir -p /app/voices && mkdir -p /app/logs \
     && chown -R vibevoice:vibevoice /app
 
 # Copy application code
